@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verilog Pin Mismatch Debugger</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f24; --muted:#5c6570;
+    --line:#e2e6ea; --accent:#2f6df6; --accent-ink:#fff;
+    --code-bg:#0f1720; --code-ink:#e6edf3;
+    --ok-bg:#e6f6ec; --ok-ink:#136c34; --ok-line:#9fdcb4;
+    --warn-bg:#fff6e0; --warn-ink:#8a5a00; --warn-line:#f0d18a;
+    --bad-bg:#fdeaea; --bad-ink:#a3271f; --bad-line:#f2b6b1;
+    --chip:#eef1f5;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#9aa4af;
+      --line:#2a313a; --accent:#4f8cff; --accent-ink:#0b1220;
+      --code-bg:#0b1017; --code-ink:#e6edf3;
+      --ok-bg:#11291b; --ok-ink:#68d18d; --ok-line:#1f5334;
+      --warn-bg:#2c2410; --warn-ink:#e5b64a; --warn-line:#5a4718;
+      --bad-bg:#2c1414; --bad-ink:#f0857c; --bad-line:#5a2320;
+      --chip:#222933;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto;padding:28px 20px 80px}
+  h1{font-size:24px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 24px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:18px 18px 16px;margin:0 0 18px}
+  .step{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+  .num{width:26px;height:26px;border-radius:50%;background:var(--accent);
+    color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:14px;flex:0 0 auto}
+  .step h2{font-size:16px;margin:0}
+  .hint{color:var(--muted);font-size:13px;margin:2px 0 12px}
+  textarea{width:100%;min-height:120px;resize:vertical;background:var(--panel);
+    color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+    font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .codebox{position:relative}
+  pre.code{margin:0;background:var(--code-bg);color:var(--code-ink);border-radius:8px;
+    padding:14px 14px;overflow:auto;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .copybtn{position:absolute;top:10px;right:10px}
+  button{font:inherit;font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;
+    border:1px solid var(--line);background:var(--chip);color:var(--ink);padding:7px 12px}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+  button:active{transform:translateY(1px)}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .file{display:inline-flex;align-items:center;gap:10px}
+  .filename{color:var(--muted);font-size:13px}
+  select{font:inherit;font-size:13px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel);color:var(--ink)}
+  label.opt{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer}
+  .toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .summary{display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 14px}
+  .pill{border-radius:999px;padding:4px 12px;font-size:13px;font-weight:600;border:1px solid var(--line)}
+  .pill.ok{background:var(--ok-bg);color:var(--ok-ink);border-color:var(--ok-line)}
+  .pill.warn{background:var(--warn-bg);color:var(--warn-ink);border-color:var(--warn-line)}
+  .pill.bad{background:var(--bad-bg);color:var(--bad-ink);border-color:var(--bad-line)}
+  .pill.tot{background:var(--chip)}
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:640px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+    background:var(--panel);position:sticky;top:0}
+  tbody tr:last-child td{border-bottom:none}
+  td.mono,th.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  tr.ok{background:var(--ok-bg)}
+  tr.warn{background:var(--warn-bg)}
+  tr.bad{background:var(--bad-bg)}
+  .status{font-weight:700;font-size:12px}
+  tr.ok .status{color:var(--ok-ink)}
+  tr.warn .status{color:var(--warn-ink)}
+  tr.bad .status{color:var(--bad-ink)}
+  .cellbad{color:var(--bad-ink);font-weight:700}
+  .empty{color:var(--muted)}
+  .msg{font-size:13px;color:var(--muted);margin-top:10px}
+  .msg.err{color:var(--bad-ink)}
+  footer{color:var(--muted);font-size:12px;margin-top:26px;text-align:center}
+  a{color:var(--accent)}
+  code.inl{background:var(--chip);border-radius:4px;padding:1px 5px;font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Verilog Pin Mismatch Debugger</h1>
+  <p class="sub">Dump a Virtuoso schematic's ports from the CIW, paste them back, and diff them against a SystemVerilog module &mdash; name, direction, and width.</p>
+
+  <!-- STEP 1 -->
+  <div class="panel">
+    <div class="step"><div class="num">1</div><h2>Copy this SKILL into the ICFB / CIW window</h2></div>
+    <p class="hint">Open your schematic in Virtuoso, paste the block below into the CIW command line, and press Enter. It prints the current view's terminals.</p>
+    <div class="codebox">
+      <button class="copybtn" id="copySkill">Copy</button>
+      <pre class="code" id="skillCode"></pre>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="panel">
+    <div class="step"><div class="num">2</div><h2>Paste the CIW output here</h2></div>
+    <p class="hint">Copy everything from <code class="inl">###PORTDUMP_BEGIN###</code> through <code class="inl">###PORTDUMP_END###</code> (extra CIW text is ignored).</p>
+    <textarea id="dumpInput" placeholder="###PORTDUMP_BEGIN###
+# lib=MYLIB cell=alu view=schematic
+PORT|clk|input
+PORT|rst_n|input
+PORT|data<7:0>|output
+###PORTDUMP_END###"></textarea>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="panel">
+    <div class="step"><div class="num">3</div><h2>Provide the SystemVerilog module</h2></div>
+    <p class="hint">Choose a <code class="inl">.sv</code> / <code class="inl">.v</code> file (the browser opens a native picker) &mdash; or paste the source directly below.</p>
+    <div class="row" style="margin-bottom:10px">
+      <span class="file">
+        <button id="pickBtn">Choose .sv file&hellip;</button>
+        <input type="file" id="svFile" accept=".sv,.v,.svh,.verilog,text/plain" style="display:none">
+        <span class="filename" id="svName">no file chosen</span>
+      </span>
+    </div>
+    <textarea id="svInput" placeholder="module alu (
+  input  logic       clk,
+  input  logic       rst_n,
+  output logic [7:0] data
+);
+  ...
+endmodule"></textarea>
+    <div class="toolbar">
+      <span class="filename">Module:</span>
+      <select id="moduleSel"><option value="">(auto)</option></select>
+      <label class="opt"><input type="checkbox" id="ciName"> case-insensitive names</label>
+      <label class="opt"><input type="checkbox" id="ignoreWidth"> ignore width</label>
+    </div>
+  </div>
+
+  <!-- COMPARE -->
+  <div class="panel">
+    <div class="row" style="justify-content:space-between">
+      <button class="primary" id="compareBtn">Compare ports</button>
+      <button id="loadExample">Load example</button>
+    </div>
+    <div id="msg" class="msg"></div>
+    <div id="results" style="margin-top:16px"></div>
+  </div>
+
+  <footer>Runs entirely in your browser &mdash; nothing is uploaded. &nbsp;·&nbsp; Cadence directions <code class="inl">inputOutput</code>/<code class="inl">tristate</code> map to SV <code class="inl">inout</code>.</footer>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- the SKILL script (kept in sync with skill/dump_ports.il) ---------- */
+const SKILL = String.raw`let( (cv)
+    cv = geGetEditCellView()
+    if( cv then
+        printf("###PORTDUMP_BEGIN###\n")
+        printf("# lib=%s cell=%s view=%s\n"
+               cv~>libName cv~>cellName cv~>viewName)
+        foreach( term cv~>terminals
+            printf("PORT|%s|%s\n" term~>name term~>direction)
+        )
+        printf("###PORTDUMP_END###\n")
+    else
+        printf("ERROR: no edit cellview - open a schematic first.\n")
+    )
+    t
+)`;
+document.getElementById('skillCode').textContent = SKILL;
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+
+function canonDir(d){
+  if(!d) return '';
+  d = String(d).trim().toLowerCase();
+  if(d==='input') return 'input';
+  if(d==='output') return 'output';
+  if(d==='inout'||d==='inputoutput'||d==='tristate'||d==='bidir'||d==='bidirectional') return 'inout';
+  return d; // switch/jumper/unused/etc -> shown as-is, won't match
+}
+// width from a range string like "7:0" or "[7:0]" or "<7:0>"; returns {width, text}
+function parseRange(raw){
+  if(raw==null) return {width:1, text:''};
+  const s = String(raw).trim();
+  const inner = s.replace(/^[\[<]/,'').replace(/[\]>]$/,'').trim(); // strip one bracket pair
+  if(inner===''){ return {width:1, text:''}; }
+  const m = inner.match(/^(\d+)\s*:\s*(\d+)$/); // pure numeric range only
+  if(m){
+    const a=+m[1], b=+m[2];
+    return {width:Math.abs(a-b)+1, text:'['+a+':'+b+']'};
+  }
+  // parametric / expression range: keep text, width unknown
+  return {width:null, text:'['+inner+']'};
+}
+
+/* ---------- parse the CIW dump ---------- */
+function parseDump(text){
+  const ports=[]; let meta={lib:'',cell:'',view:''};
+  const lines=text.split(/\r?\n/);
+  for(const ln of lines){
+    const mm=ln.match(/#\s*lib=(\S+)\s+cell=(\S+)\s+view=(\S+)/);
+    if(mm){ meta={lib:mm[1],cell:mm[2],view:mm[3]}; continue; }
+    const m=ln.match(/^\s*PORT\|([^|]+)\|(.+?)\s*$/);
+    if(!m) continue;
+    let name=m[1].trim();
+    const dirRaw=m[2].trim();
+    let range='';
+    // Cadence bus notation  name<7:0>
+    const bm=name.match(/^(.*?)<([^>]*)>\s*$/);
+    if(bm){ name=bm[1]; range=bm[2]; }
+    const r=parseRange(range);
+    ports.push({name, dirRaw, dir:canonDir(dirRaw), width:r.width, wtext:r.text});
+  }
+  return {ports, meta};
+}
+
+/* ---------- parse SystemVerilog ---------- */
+function stripComments(s){
+  return s.replace(/\/\*[\s\S]*?\*\//g,' ').replace(/\/\/[^\n]*/g,' ');
+}
+function skipWs(s,i){ while(i<s.length && /\s/.test(s[i])) i++; return i; }
+function matchParen(s,i){ // s[i]==='(' -> index just after matching ')'
+  let d=0;
+  for(;i<s.length;i++){ if(s[i]==='(')d++; else if(s[i]===')'){d--; if(d===0)return i+1;} }
+  return s.length;
+}
+function splitTop(s){ // split on commas not inside [] () {} <>
+  const out=[]; let d=0, cur='';
+  for(const ch of s){
+    if('([{'.includes(ch))d++;
+    else if(')]}'.includes(ch))d--;
+    if(ch===',' && d===0){ out.push(cur); cur=''; }
+    else cur+=ch;
+  }
+  if(cur.trim()!=='') out.push(cur);
+  return out;
+}
+const TYPEWORDS=new Set(['logic','wire','reg','bit','signed','unsigned','tri','wand','wor',
+  'var','integer','int','byte','shortint','longint','time','real','realtime','supply0',
+  'supply1','wreal','genvar','const','automatic','static','interconnect']);
+
+function parseSVItemANSI(item, lastDir){
+  // returns {name, dir, width, wtext} or null
+  let t=item.replace(/=[\s\S]*$/,''); // drop default value
+  let dir=lastDir;
+  const dm=t.match(/\b(input|output|inout)\b/);
+  if(dm) dir=dm[1];
+  const rng=t.match(/\[[^\]]*\]/);
+  const r=parseRange(rng?rng[0]:null);
+  // name = last identifier token (allow escaped \name )
+  const ids=t.match(/\\\S+|[A-Za-z_][\w$]*/g)||[];
+  // filter out keywords/type words to be safe, but keep last real identifier
+  let name=null;
+  for(let k=ids.length-1;k>=0;k--){
+    const w=ids[k];
+    const lw=w.toLowerCase();
+    if(lw==='input'||lw==='output'||lw==='inout') continue;
+    if(TYPEWORDS.has(lw)) continue;
+    name=w; break;
+  }
+  if(!name) return {skip:true, dir};
+  return {name:name.replace(/^\\/,''), dir, width:r.width, wtext:r.text};
+}
+
+function parseModule(name, portListText, bodyText){
+  const items=splitTop(portListText).map(s=>s.trim()).filter(Boolean);
+  const isANSI = items.some(it=>/\b(input|output|inout)\b/.test(it));
+  const ports=[];
+  if(isANSI){
+    let lastDir='';
+    for(const it of items){
+      const p=parseSVItemANSI(it,lastDir);
+      if(!p) continue;
+      lastDir=p.dir||lastDir;
+      if(p.skip) continue;
+      ports.push({name:p.name, dirRaw:p.dir, dir:canonDir(p.dir), width:p.width, wtext:p.wtext});
+    }
+  } else {
+    // non-ANSI: names in header, directions in body decls
+    const order=[];
+    for(const it of items){
+      const idm=it.match(/\\\S+|[A-Za-z_][\w$]*/);
+      if(idm) order.push(idm[0].replace(/^\\/,''));
+    }
+    const dirMap={};
+    const dre=/\b(input|output|inout)\b([^;]*);/g; let m;
+    while((m=dre.exec(bodyText))){
+      const dir=m[1]; let decl=m[2];
+      const rng=decl.match(/\[[^\]]*\]/);
+      const r=parseRange(rng?rng[0]:null);
+      // remove range and type words, split names by comma
+      let rest=decl.replace(/\[[^\]]*\]/g,' ');
+      for(const nm of rest.split(',')){
+        const idm=nm.match(/\\\S+|[A-Za-z_][\w$]*/);
+        if(!idm) continue;
+        const id=idm[0].toLowerCase();
+        if(TYPEWORDS.has(id)) { // maybe "wire a" -> take last id instead
+          const all=nm.match(/\\\S+|[A-Za-z_][\w$]*/g)||[];
+          const real=all.map(x=>x).filter(x=>!TYPEWORDS.has(x.toLowerCase()));
+          if(real.length) dirMap[real[real.length-1].replace(/^\\/,'')]={dir,width:r.width,wtext:r.text};
+          continue;
+        }
+        dirMap[idm[0].replace(/^\\/,'')]={dir,width:r.width,wtext:r.text};
+      }
+    }
+    for(const nm of order){
+      const d=dirMap[nm]||{dir:'',width:1,wtext:''};
+      ports.push({name:nm, dirRaw:d.dir, dir:canonDir(d.dir), width:d.width, wtext:d.wtext});
+    }
+  }
+  return {name, ports};
+}
+
+function parseSV(src){
+  const s=stripComments(src);
+  const mods=[];
+  const re=/\bmodule\s+(\\\S+|[A-Za-z_][\w$]*)/g; let m;
+  while((m=re.exec(s))){
+    const name=m[1].replace(/^\\/,'');
+    let i=re.lastIndex;
+    i=skipWs(s,i);
+    if(s[i]==='#'){ i++; i=skipWs(s,i); if(s[i]==='('){ i=matchParen(s,i); i=skipWs(s,i);} }
+    let portList='';
+    if(s[i]==='('){ const end=matchParen(s,i); portList=s.slice(i+1,end-1); i=end; }
+    const endIdx=s.indexOf('endmodule',i);
+    const body=s.slice(i, endIdx===-1?s.length:endIdx);
+    mods.push(parseModule(name, portList, body));
+    re.lastIndex = endIdx===-1? s.length : endIdx+9;
+  }
+  return mods;
+}
+
+/* ---------- compare ---------- */
+function normKey(name){ return $('ciName').checked ? name.toLowerCase() : name; }
+
+function compare(schPorts, svPorts){
+  const ignoreW=$('ignoreWidth').checked;
+  const schMap=new Map(), svMap=new Map(), order=[];
+  for(const p of schPorts){ const k=normKey(p.name); if(!schMap.has(k)){schMap.set(k,p);order.push(k);} }
+  for(const p of svPorts){ const k=normKey(p.name); if(!svMap.has(k)){svMap.set(k,p); if(!schMap.has(k))order.push(k);} }
+  const rows=[];
+  for(const k of order){
+    const a=schMap.get(k), b=svMap.get(k);
+    let status, cls, dirBad=false, wBad=false;
+    if(a && !b){ status='ONLY IN SCHEMATIC'; cls='bad'; }
+    else if(!a && b){ status='ONLY IN SV'; cls='bad'; }
+    else {
+      dirBad = a.dir!==b.dir;
+      wBad = !ignoreW && a.width!=null && b.width!=null && a.width!==b.width;
+      if(dirBad && wBad){ status='DIR + WIDTH'; cls='bad'; }
+      else if(dirBad){ status='DIR MISMATCH'; cls='warn'; }
+      else if(wBad){ status='WIDTH MISMATCH'; cls='warn'; }
+      else { status='MATCH'; cls='ok'; }
+    }
+    rows.push({a,b,status,cls,dirBad,wBad});
+  }
+  return rows;
+}
+
+/* ---------- render ---------- */
+function wDisp(p){ if(!p) return ''; if(p.wtext) return p.wtext; return p.width===1?'1':(p.width==null?'?':p.width); }
+
+function render(rows){
+  const counts={ok:0,warn:0,bad:0};
+  for(const r of rows) counts[r.cls]++;
+  const res=$('results');
+  if(!rows.length){ res.innerHTML='<p class="empty">No ports to compare.</p>'; return; }
+  let html='<div class="summary">'+
+    '<span class="pill tot">'+rows.length+' pins</span>'+
+    '<span class="pill ok">'+counts.ok+' match</span>'+
+    '<span class="pill warn">'+counts.warn+' mismatch</span>'+
+    '<span class="pill bad">'+counts.bad+' missing / wrong</span></div>';
+  html+='<div class="tablewrap"><table><thead><tr>'+
+    '<th class="mono">Pin</th><th>Sch dir</th><th class="mono">Sch W</th>'+
+    '<th>SV dir</th><th class="mono">SV W</th><th>Status</th></tr></thead><tbody>';
+  for(const r of rows){
+    const name=(r.a?r.a.name:r.b.name);
+    const aDir=r.a?(r.a.dirRaw||r.a.dir||'&mdash;'):'<span class="empty">&mdash;</span>';
+    const bDir=r.b?(r.b.dirRaw||r.b.dir||'&mdash;'):'<span class="empty">&mdash;</span>';
+    const aW=r.a?wDisp(r.a):'<span class="empty">&mdash;</span>';
+    const bW=r.b?wDisp(r.b):'<span class="empty">&mdash;</span>';
+    const dirCls=r.dirBad?' class="cellbad"':'';
+    const wCls=r.wBad?' class="cellbad"':'';
+    html+='<tr class="'+r.cls+'">'+
+      '<td class="mono">'+esc(name)+'</td>'+
+      '<td>'+esc(aDir)+'</td>'+
+      '<td class="mono"'+ (r.a?'' :' ')+'>'+aW+'</td>'+
+      '<td'+(r.b&&r.dirBad?' class="cellbad"':'')+'>'+esc(bDir)+'</td>'+
+      '<td class="mono"'+(r.b&&r.wBad?' class="cellbad"':'')+'>'+bW+'</td>'+
+      '<td class="status">'+r.status+'</td></tr>';
+  }
+  html+='</tbody></table></div>';
+  res.innerHTML=html;
+}
+function esc(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+/* ---------- module dropdown ---------- */
+let SVMODS=[];
+function refreshModules(){
+  SVMODS=parseSV($('svInput').value);
+  const sel=$('moduleSel'); const prev=sel.value;
+  sel.innerHTML='<option value="">(auto)</option>'+
+    SVMODS.map(m=>'<option value="'+esc(m.name)+'">'+esc(m.name)+' ('+m.ports.length+' ports)</option>').join('');
+  if([...sel.options].some(o=>o.value===prev)) sel.value=prev;
+}
+function chosenModule(schCell){
+  if(!SVMODS.length) return null;
+  const want=$('moduleSel').value;
+  if(want) return SVMODS.find(m=>m.name===want)||null;
+  if(schCell){ const byCell=SVMODS.find(m=>m.name.toLowerCase()===schCell.toLowerCase()); if(byCell) return byCell; }
+  return SVMODS[0];
+}
+
+/* ---------- events ---------- */
+$('copySkill').onclick=async()=>{
+  try{ await navigator.clipboard.writeText(SKILL); flash($('copySkill'),'Copied!'); }
+  catch(e){ selectText($('skillCode')); flash($('copySkill'),'Select+Cmd-C'); }
+};
+function flash(btn,txt){ const o=btn.textContent; btn.textContent=txt; setTimeout(()=>btn.textContent=o,1200); }
+function selectText(el){ const r=document.createRange(); r.selectNodeContents(el);
+  const s=getSelection(); s.removeAllRanges(); s.addRange(r); }
+
+$('pickBtn').onclick=()=>$('svFile').click();
+$('svFile').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  $('svName').textContent=f.name;
+  const rd=new FileReader();
+  rd.onload=()=>{ $('svInput').value=rd.result; refreshModules(); };
+  rd.readAsText(f);
+};
+$('svInput').addEventListener('input', refreshModules);
+
+$('compareBtn').onclick=()=>{
+  const msg=$('msg'); msg.className='msg'; msg.textContent='';
+  const dumpTxt=$('dumpInput').value.trim();
+  const svTxt=$('svInput').value.trim();
+  if(!dumpTxt){ err('Paste the CIW port dump in step 2.'); return; }
+  if(!svTxt){ err('Provide a SystemVerilog module in step 3.'); return; }
+  const {ports:schPorts, meta}=parseDump(dumpTxt);
+  if(!schPorts.length){ err('No PORT| lines found in the dump. Copy the block between the BEGIN/END markers.'); return; }
+  refreshModules();
+  const mod=chosenModule(meta.cell);
+  if(!mod){ err('No module found in the SystemVerilog source.'); return; }
+  const rows=compare(schPorts, mod.ports);
+  const note=[];
+  note.push('schematic '+(meta.cell?('<b>'+esc(meta.cell)+'</b>'):'(?)'));
+  note.push('vs SV module <b>'+esc(mod.name)+'</b>');
+  msg.innerHTML='Compared '+note.join(' ')+' &mdash; '+schPorts.length+' schematic pins, '+mod.ports.length+' SV ports.';
+  render(rows);
+};
+function err(t){ const m=$('msg'); m.className='msg err'; m.textContent=t; $('results').innerHTML=''; }
+
+/* ---------- example ---------- */
+$('loadExample').onclick=()=>{
+  $('dumpInput').value=
+`###PORTDUMP_BEGIN###
+# lib=DEMO cell=alu view=schematic
+PORT|clk|input
+PORT|rst_n|input
+PORT|en|input
+PORT|opcode<2:0>|input
+PORT|a<7:0>|input
+PORT|b<7:0>|input
+PORT|result<7:0>|output
+PORT|zero|output
+PORT|sda|inputOutput
+###PORTDUMP_END###`;
+  $('svInput').value=
+`module alu (
+  input  logic        clk,
+  input  logic        rst_n,
+  input  logic        enable,        // name differs: en vs enable
+  input  logic [2:0]  opcode,
+  input  logic [7:0]  a,
+  input  logic [3:0]  b,             // width differs: [7:0] vs [3:0]
+  output logic [7:0]  result,
+  input  logic        zero,          // dir differs: output vs input
+  inout  wire         sda
+);
+endmodule`;
+  $('svName').textContent='(example)';
+  refreshModules();
+  $('compareBtn').click();
+};
+
+refreshModules();
+</script>
+</body>
+</html>

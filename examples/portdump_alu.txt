@@ -1,0 +1,12 @@
+###PORTDUMP_BEGIN###
+# lib=DEMO cell=alu view=schematic
+PORT|clk|input
+PORT|rst_n|input
+PORT|en|input
+PORT|opcode<2:0>|input
+PORT|a<7:0>|input
+PORT|b<7:0>|input
+PORT|result<7:0>|output
+PORT|zero|output
+PORT|sda|inputOutput
+###PORTDUMP_END###
