@@ -1,3 +1,15 @@
+#!/bin/sh
+#=====================================================================
+# Verilog Pin Mismatch Debugger  -  make a LOCAL copy of the tool.
+#
+# ONE STEP:  run this file.      sh make_local_tool.sh
+#
+# It drops "verilog-pin-mismatch-debugger.html" in the current folder
+# and opens it. No internet, no install - it is the whole tool inline.
+# Works the same as https://borenw.github.io/verilog-pin-mismatch-debugger/
+#=====================================================================
+OUT="verilog-pin-mismatch-debugger.html"
+cat > "$OUT" <<'PINEOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -502,3 +514,13 @@ refreshModules();
 </script>
 </body>
 </html>
+PINEOF
+F="`pwd`/$OUT"
+echo ""
+echo "Created: $F"
+echo "Open it in any web browser (double-click, or File > Open)."
+if   command -v xdg-open >/dev/null 2>&1; then xdg-open "$F" >/dev/null 2>&1 &
+elif command -v open     >/dev/null 2>&1; then open "$F" >/dev/null 2>&1 &
+elif command -v firefox  >/dev/null 2>&1; then firefox "$F" >/dev/null 2>&1 &
+elif command -v google-chrome >/dev/null 2>&1; then google-chrome "$F" >/dev/null 2>&1 &
+else echo "(Could not auto-launch a browser - just open the file above manually.)"; fi

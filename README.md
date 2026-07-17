@@ -8,6 +8,25 @@ A single-page, browser-only tool for catching port mismatches between a
 No install, no server, no upload — everything runs locally in your browser.
 You can also just open `index.html` from disk (`file://`).
 
+## Run it locally on a Unix box (one command)
+
+On a Cadence/Unix workstation with no easy browser access to GitHub, grab
+[`make_local_tool.sh`](make_local_tool.sh), then run:
+
+```sh
+sh make_local_tool.sh
+```
+
+That's it. The script has the whole tool embedded — it writes
+`verilog-pin-mismatch-debugger.html` into the current folder and opens it in a
+browser. No internet, no install, no clone needed.
+
+If your box *does* have internet, you can fetch and run it in one line:
+
+```sh
+curl -sL https://raw.githubusercontent.com/borenw/verilog-pin-mismatch-debugger/main/make_local_tool.sh | sh
+```
+
 ## Why
 
 When a schematic and its RTL are maintained separately, ports drift: a pin gets
@@ -62,6 +81,7 @@ For those, treat a "width unknown" result as "check by hand."
 
 ```
 index.html              the tool (self-contained; no dependencies)
+make_local_tool.sh      one-command Unix script: writes the tool locally & opens it
 skill/dump_ports.il     the Virtuoso SKILL port dumper
 examples/alu.sv         example module (3 deliberate mismatches)
 examples/portdump_alu.txt  matching example CIW dump
